@@ -8,6 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// UserService is a union of UserService and PasswordsService.
+type UserService interface {
+	influxdb.UserService
+	influxdb.PasswordsService
+}
+
 // Returns a single user by ID.
 func (s *Service) FindUserByID(ctx context.Context, id influxdb.ID) (*influxdb.User, error) {
 	var user *influxdb.User

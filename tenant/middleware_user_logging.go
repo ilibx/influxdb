@@ -9,20 +9,22 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ UserService = (*UserLogger)(nil)
+
 type UserLogger struct {
 	logger      *zap.Logger
 	userService influxdb.UserService
+	pwdService  influxdb.PasswordsService
 }
 
 // NewUserLogger returns a logging service middleware for the User Service.
-func NewUserLogger(log *zap.Logger, s influxdb.UserService) *UserLogger {
+func NewUserLogger(log *zap.Logger, s UserService) *UserLogger {
 	return &UserLogger{
 		logger:      log,
-		userService: s,
+		userService: s.(influxdb.UserService),
+		pwdService:  s.(influxdb.PasswordsService),
 	}
 }
-
-var _ influxdb.UserService = (*UserLogger)(nil)
 
 func (l *UserLogger) CreateUser(ctx context.Context, u *influxdb.User) (err error) {
 	defer func(start time.Time) {
@@ -96,4 +98,43 @@ func (l *UserLogger) DeleteUser(ctx context.Context, id influxdb.ID) (err error)
 		l.logger.Info("user create", dur)
 	}(time.Now())
 	return l.userService.DeleteUser(ctx, id)
+}
+
+func (l *UserLogger) SetPassword(ctx context.Context, userID influxdb.ID, password string) (err error) {
+	defer func(start time.Time) {
+		dur := zap.Duration("took", time.Since(start))
+		if err != nil {
+			msg := fmt.Sprintf("failed to set password for user with ID %v", userID)
+			l.logger.Error(msg, zap.Error(err), dur)
+			return
+		}
+		l.logger.Info("set password", dur)
+	}(time.Now())
+	return l.pwdService.SetPassword(ctx, userID, password)
+}
+
+func (l *UserLogger) ComparePassword(ctx context.Context, userID influxdb.ID, password string) (err error) {
+	defer func(start time.Time) {
+		dur := zap.Duration("took", time.Since(start))
+		if err != nil {
+			msg := fmt.Sprintf("failed to compare password for user with ID %v", userID)
+			l.logger.Error(msg, zap.Error(err), dur)
+			return
+		}
+		l.logger.Info("compare password", dur)
+	}(time.Now())
+	return l.pwdService.ComparePassword(ctx, userID, password)
+}
+
+func (l *UserLogger) CompareAndSetPassword(ctx context.Context, userID influxdb.ID, old, new string) (err error) {
+	defer func(start time.Time) {
+		dur := zap.Duration("took", time.Since(start))
+		if err != nil {
+			msg := fmt.Sprintf("failed to compare and set password for user with ID %v", userID)
+			l.logger.Error(msg, zap.Error(err), dur)
+			return
+		}
+		l.logger.Info("compare and set password", dur)
+	}(time.Now())
+	return l.pwdService.CompareAndSetPassword(ctx, userID, old, new)
 }

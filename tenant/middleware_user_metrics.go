@@ -8,20 +8,23 @@ import (
 	"github.com/influxdata/influxdb/kit/prom"
 )
 
+var _ UserService = (*UserMetrics)(nil)
+
 type UserMetrics struct {
 	// RED metrics
 	rec *metric.REDClient
 
 	userService influxdb.UserService
+	pwdService  influxdb.PasswordsService
 }
 
-var _ influxdb.UserService = (*UserMetrics)(nil)
-
 // NewUserMetrics returns a metrics service middleware for the User Service.
-func NewUserMetrics(reg *prom.Registry, s influxdb.UserService) *UserMetrics {
+func NewUserMetrics(reg *prom.Registry, s UserService, opts ...MetricsOption) *UserMetrics {
+	o := applyOpts(opts...)
 	return &UserMetrics{
-		rec:         metric.New(reg, "user"),
-		userService: s,
+		rec:         metric.New(reg, o.applySuffix("user")),
+		userService: s.(influxdb.UserService),
+		pwdService:  s.(influxdb.PasswordsService),
 	}
 }
 
@@ -58,5 +61,23 @@ func (m *UserMetrics) UpdateUser(ctx context.Context, id influxdb.ID, upd influx
 func (m *UserMetrics) DeleteUser(ctx context.Context, id influxdb.ID) error {
 	rec := m.rec.Record("delete_user")
 	err := m.userService.DeleteUser(ctx, id)
+	return rec(err)
+}
+
+func (m *UserMetrics) SetPassword(ctx context.Context, userID influxdb.ID, password string) error {
+	rec := m.rec.Record("set_password")
+	err := m.pwdService.SetPassword(ctx, userID, password)
+	return rec(err)
+}
+
+func (m *UserMetrics) ComparePassword(ctx context.Context, userID influxdb.ID, password string) error {
+	rec := m.rec.Record("compare_password")
+	err := m.pwdService.ComparePassword(ctx, userID, password)
+	return rec(err)
+}
+
+func (m *UserMetrics) CompareAndSetPassword(ctx context.Context, userID influxdb.ID, old, new string) error {
+	rec := m.rec.Record("compare_and_set_password")
+	err := m.pwdService.CompareAndSetPassword(ctx, userID, old, new)
 	return rec(err)
 }
