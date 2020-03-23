@@ -80,7 +80,7 @@ func (h *urmHandler) getURMsByType(userType influxdb.UserType) http.HandlerFunc 
 		}
 		h.log.Debug("Members/owners retrieved", zap.String("users", fmt.Sprint(users)))
 
-		h.api.Respond(w, http.StatusOK, users)
+		h.api.Respond(w, http.StatusOK, newResourceUsersResponse(filter, users))
 	}
 }
 
@@ -118,6 +118,12 @@ func (h *urmHandler) postURMByType(userType influxdb.UserType) http.HandlerFunc 
 			return
 		}
 
+		user, err := h.userSvc.FindUserByID(ctx, req.UserID)
+		if err != nil {
+			h.api.Err(w, err)
+			return
+		}
+
 		mapping := &influxdb.UserResourceMapping{
 			ResourceID:   req.ResourceID,
 			ResourceType: h.rt,
@@ -130,7 +136,7 @@ func (h *urmHandler) postURMByType(userType influxdb.UserType) http.HandlerFunc 
 		}
 		h.log.Debug("Member/owner created", zap.String("mapping", fmt.Sprint(mapping)))
 
-		w.WriteHeader(http.StatusNoContent)
+		h.api.Respond(w, http.StatusCreated, newResourceUserResponse(user, userType))
 	}
 }
 
@@ -224,4 +230,35 @@ func (h *urmHandler) decodeDeleteRequest(ctx context.Context, r *http.Request) (
 		userID:     uid,
 		resourceID: rid,
 	}, nil
+}
+
+type resourceUserResponse struct {
+	Role influxdb.UserType `json:"role"`
+	*userResponse
+}
+
+func newResourceUserResponse(u *influxdb.User, userType influxdb.UserType) *resourceUserResponse {
+	return &resourceUserResponse{
+		Role:         userType,
+		userResponse: newUserResponse(u),
+	}
+}
+
+type resourceUsersResponse struct {
+	Links map[string]string       `json:"links"`
+	Users []*resourceUserResponse `json:"users"`
+}
+
+func newResourceUsersResponse(f influxdb.UserResourceMappingFilter, users []*influxdb.User) *resourceUsersResponse {
+	rs := resourceUsersResponse{
+		Links: map[string]string{
+			"self": fmt.Sprintf("/api/v2/%s/%s/%ss", f.ResourceType, f.ResourceID, f.UserType),
+		},
+		Users: make([]*resourceUserResponse, 0, len(users)),
+	}
+
+	for _, user := range users {
+		rs.Users = append(rs.Users, newResourceUserResponse(user, f.UserType))
+	}
+	return &rs
 }
